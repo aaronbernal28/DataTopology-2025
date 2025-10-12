@@ -182,6 +182,19 @@ class ConstructorFiltracionInteractivo:
         """
         simplex_ordenado = sorted(simplex)
         return simplex_ordenado in estado['simplices'][str(en_paso)]
+
+    def encontrar_paso_agregado(self, simplex, estado):
+        """Devuelve el primer paso en el que el simplex fue agregado explícitamente."""
+        simplex_ordenado = sorted(simplex)
+        for paso in range(estado['tamano_filtracion']):
+            paso_str = str(paso)
+            if simplex_ordenado in estado['agregados_en_paso'][paso_str]:
+                return paso
+        for paso in range(estado['tamano_filtracion']):
+            paso_str = str(paso)
+            if simplex_ordenado in estado['simplices'][paso_str]:
+                return paso
+        return max(0, estado.get('paso_actual', 0))
     
     def crear_figura_filtracion(self, estado):
         """
@@ -227,7 +240,10 @@ class ConstructorFiltracionInteractivo:
             height=400,
             showlegend=False,
             plot_bgcolor='white',
-            margin=dict(l=20, r=20, t=40, b=20)
+            margin=dict(l=20, r=20, t=40, b=20),
+            clickmode='event+select',
+            hovermode='closest',
+            dragmode=False
         )
         
         return fig
@@ -241,6 +257,7 @@ class ConstructorFiltracionInteractivo:
             self._dibujar_triangulo(
                 fig,
                 triangulo_ids,
+                paso,
                 col,
                 fillcolor='rgba(189, 195, 199, 0.18)',
                 line_color='rgba(127, 140, 141, 0.35)'
@@ -248,13 +265,14 @@ class ConstructorFiltracionInteractivo:
         
         # Dibujar todas las aristas en gris
         for arista_ids in self.aristas_ids:
-            self._dibujar_arista(fig, arista_ids, col, color='lightgray', width=1, opacity=0.3)
+            self._dibujar_arista(fig, arista_ids, paso, col, color='lightgray', width=1, opacity=0.3)
         
         # Dibujar todos los vértices en gris
         for vertice_id in self.vertices_ids:
             self._dibujar_vertice(
                 fig,
                 vertice_id,
+                paso,
                 col,
                 color='lightgray',
                 size=8,
@@ -281,6 +299,7 @@ class ConstructorFiltracionInteractivo:
             self._dibujar_triangulo(
                 fig,
                 triangulo,
+                paso,
                 col,
                 fillcolor='rgba(52, 152, 219, 0.38)',
                 line_color='rgba(41, 128, 185, 0.75)',
@@ -289,13 +308,14 @@ class ConstructorFiltracionInteractivo:
         
         # Dibujar aristas activas
         for arista in aristas_activas:
-            self._dibujar_arista(fig, arista, col, color='blue', width=3, opacity=1.0)
+            self._dibujar_arista(fig, arista, paso, col, color='blue', width=3, opacity=1.0)
         
         # Dibujar vértices activos
         for vertice in vertices_activos:
             self._dibujar_vertice(
                 fig,
                 vertice,
+                paso,
                 col,
                 color='blue',
                 size=12,
@@ -303,7 +323,7 @@ class ConstructorFiltracionInteractivo:
                 mostrar_etiqueta=False
             )
 
-    def _dibujar_vertice(self, fig, vertice_id, col, color='blue', size=10, opacity=1.0, mostrar_etiqueta=True):
+    def _dibujar_vertice(self, fig, vertice_id, paso, col, color='blue', size=10, opacity=1.0, mostrar_etiqueta=True):
         """Dibuja un vértice en el subplot especificado."""
         nodos_fisicos = id_a_nodos(vertice_id[0])
 
@@ -317,6 +337,7 @@ class ConstructorFiltracionInteractivo:
                 marker=dict(size=size, color=color, opacity=opacity),
                 hoverinfo='text',
                 hovertext=f"ID: {vertice_id[0]} (nodo {nodo})",
+                customdata=[[paso, 0, vertice_id[0]]],
                 showlegend=False
             )
             if mostrar_etiqueta:
@@ -329,7 +350,7 @@ class ConstructorFiltracionInteractivo:
                 row=1, col=col
             )
 
-    def _dibujar_arista(self, fig, arista_ids, col, color='blue', width=2, opacity=1.0):
+    def _dibujar_arista(self, fig, arista_ids, paso, col, color='blue', width=2, opacity=1.0):
         """Dibuja una arista en el subplot especificado."""
         id1, id2 = arista_ids
         nodos1 = id_a_nodos(id1)
@@ -341,6 +362,7 @@ class ConstructorFiltracionInteractivo:
                     pos1 = self.POSITIONS[nodo1]
                     pos2 = self.POSITIONS[nodo2]
 
+                    custom = [paso, 1, arista_ids[0], arista_ids[1]]
                     fig.add_trace(
                         go.Scatter(
                             x=[pos1[0], pos2[0]],
@@ -350,12 +372,27 @@ class ConstructorFiltracionInteractivo:
                             opacity=opacity,
                             hoverinfo='text',
                             hovertext=f"Arista: {arista_ids}",
+                            customdata=[[paso, 1, arista_ids[0], arista_ids[1]], [paso, 1, arista_ids[0], arista_ids[1]]],
                             showlegend=False
                         ),
                         row=1, col=col
                     )
 
-    def _dibujar_triangulo(self, fig, triangulo_ids, col, fillcolor='rgba(52, 152, 219, 0.38)', line_color=None, line_width=0):
+                    # Invisible midpoint marker to improve click hitbox on edges
+                    fig.add_trace(
+                        go.Scatter(
+                            x=[(pos1[0] + pos2[0]) / 2],
+                            y=[(pos1[1] + pos2[1]) / 2],
+                            mode='markers',
+                            marker=dict(size=30, color='rgba(0,0,0,0)', line=dict(width=0)),
+                            hoverinfo='skip',
+                            customdata=[custom],
+                            showlegend=False
+                        ),
+                        row=1, col=col
+                    )
+
+    def _dibujar_triangulo(self, fig, triangulo_ids, paso, col, fillcolor='rgba(52, 152, 219, 0.38)', line_color=None, line_width=0):
         """Dibuja un triángulo en el subplot especificado."""
         id1, id2, id3 = triangulo_ids
         nodos1 = id_a_nodos(id1)
@@ -376,6 +413,7 @@ class ConstructorFiltracionInteractivo:
                         pos2 = self.POSITIONS[n2]
                         pos3 = self.POSITIONS[n3]
 
+                        custom = [paso, 2, triangulo_ids[0], triangulo_ids[1], triangulo_ids[2]]
                         fig.add_trace(
                             go.Scatter(
                                 x=[pos1[0], pos2[0], pos3[0], pos1[0]],
@@ -385,7 +423,23 @@ class ConstructorFiltracionInteractivo:
                                 fillcolor=fillcolor,
                                 line=dict(color=actual_line_color, width=line_width),
                                 hoverinfo='text',
+                                hoveron='fills',
                                 hovertext=f"Triángulo: {triangulo_ids}",
+                                customdata=[custom, custom, custom, custom],
+                                showlegend=False
+                            ),
+                            row=1, col=col
+                        )
+
+                        # Invisible centroid marker to make the face clickable
+                        fig.add_trace(
+                            go.Scatter(
+                                x=[(pos1[0] + pos2[0] + pos3[0]) / 3],
+                                y=[(pos1[1] + pos2[1] + pos3[1]) / 3],
+                                mode='markers',
+                                marker=dict(size=36, color='rgba(0,0,0,0)', line=dict(width=0)),
+                                hoverinfo='skip',
+                                customdata=[custom],
                                 showlegend=False
                             ),
                             row=1, col=col
@@ -484,7 +538,10 @@ def crear_app_dash(tamano_filtracion=6):
                     'displayModeBar': False,
                     'scrollZoom': False,
                     'doubleClick': False,
-                    'staticPlot': True  # Desactivar todas las interacciones del gráfico
+                    'modeBarButtonsToRemove': [
+                        'zoom2d', 'pan2d', 'select2d', 'lasso2d',
+                        'autoScale2d', 'resetScale2d', 'zoomIn2d', 'zoomOut2d'
+                    ]
                 }
             )
         ]),
@@ -737,19 +794,80 @@ def crear_app_dash(tamano_filtracion=6):
         paso_actual = estado['paso_actual']
         paso_actual_str = str(paso_actual)
         
+        simplex_ordenado = sorted(simplex)
+
         # Toggle: si está activo, desactivar; si no, activar
-        if simplex in estado['simplices'][paso_actual_str]:
-            # Desactivar
-            estado = constructor.desactivar_simplex(simplex, paso_actual, estado)
+        if simplex_ordenado in estado['simplices'][paso_actual_str]:
+            paso_inicial = constructor.encontrar_paso_agregado(simplex_ordenado, estado)
+            estado = constructor.desactivar_simplex(simplex_ordenado, paso_inicial, estado)
         else:
             # Activar
-            estado = constructor.activar_simplex(simplex, paso_actual, estado)
+            estado = constructor.activar_simplex(simplex_ordenado, paso_actual, estado)
         
         # Actualizar figura
         fig = constructor.crear_figura_filtracion(estado)
         
         return estado, fig
     
+    @app.callback(
+        [Output('estado-filtracion', 'data', allow_duplicate=True),
+         Output('grafico-filtracion', 'figure', allow_duplicate=True),
+         Output('paso-actual-texto', 'children', allow_duplicate=True)],
+        Input('grafico-filtracion', 'clickData'),
+        State('estado-filtracion', 'data'),
+        prevent_initial_call=True
+    )
+    def toggle_desde_grafico(click_data, estado):
+        """Permite activar o desactivar simplices haciendo click directamente en el gráfico."""
+        if not click_data:
+            raise dash.exceptions.PreventUpdate
+
+        punto = click_data.get('points', [])
+        if not punto:
+            raise dash.exceptions.PreventUpdate
+
+        custom = punto[0].get('customdata')
+        if custom is None:
+            raise dash.exceptions.PreventUpdate
+
+        try:
+            paso_clic = int(custom[0])
+            dim = int(custom[1])
+        except (ValueError, TypeError, IndexError):
+            raise dash.exceptions.PreventUpdate
+
+        simplex_ids = [int(v) for v in custom[2:] if v is not None]
+        if not simplex_ids:
+            raise dash.exceptions.PreventUpdate
+
+        # Ajustar longitud en caso de información duplicada en customdata
+        expected_len = dim + 1
+        simplex_ids = simplex_ids[:expected_len]
+
+        estado = copy.deepcopy(estado)
+
+        # Ajustar paso respetando límites
+        paso_clic = max(0, min(paso_clic, estado['tamano_filtracion'] - 1))
+        paso_str = str(paso_clic)
+
+        simplex_ordenado = sorted(simplex_ids)
+
+        if dim not in (0, 1, 2):
+            raise dash.exceptions.PreventUpdate
+
+        if simplex_ordenado in estado['simplices'][paso_str]:
+            paso_inicial = constructor.encontrar_paso_agregado(simplex_ordenado, estado)
+            estado = constructor.desactivar_simplex(simplex_ordenado, paso_inicial, estado)
+        else:
+            estado = constructor.activar_simplex(simplex_ordenado, paso_clic, estado)
+
+        estado['paso_actual'] = paso_clic
+
+        fig = constructor.crear_figura_filtracion(estado)
+        texto = f"K{estado['paso_actual']}"
+
+        return estado, fig, texto
+
     @app.callback(
         Output('resumen-estado', 'children'),
         Input('estado-filtracion', 'data')

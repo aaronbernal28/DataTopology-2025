@@ -42,7 +42,7 @@ def main():
         except Exception:
             pass
 
-    threading.Timer(1.0, _abrir_navegador).start()
+    threading.Timer(1.0, _abrir_navegador).start()  # abre en el navegador duplicado
     app.run(debug=True, port=8050)
 
 
