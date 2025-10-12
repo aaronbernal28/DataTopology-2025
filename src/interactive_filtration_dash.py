@@ -10,8 +10,16 @@ import dash
 from dash import dcc, html, Input, Output, State, callback_context
 import plotly.graph_objects as go
 from plotly.subplots import make_subplots
-import json
 import copy
+from math import isfinite
+
+
+# Dependencias de homología persistente
+from src.utils import Filtration_plano_proyectivo
+from src.algoritmo_persistencia_3oct import (
+    build_boundary_matrix,
+    reduce_matrix
+)
 
 # Importar módulos del proyecto
 from src.filtration_graph_builder import (
@@ -59,6 +67,16 @@ class ConstructorFiltracionInteractivo:
             'simplices': {str(i): [] for i in range(tamano_filtracion)},
             'agregados_en_paso': {str(i): [] for i in range(tamano_filtracion)}
         }
+
+    def construir_filtracion(self, estado):
+        """Construye Filtration_plano_proyectivo a partir del estado de la UI."""
+        st = Filtration_plano_proyectivo(self.VALID_EDGES, self.POSITIONS)
+        tam = estado['tamano_filtracion']
+        for paso in range(tam):
+            paso_str = str(paso)
+            for simplex in estado['agregados_en_paso'][paso_str]:
+                st.insert(simplex, filtration=paso)
+        return st
     
     def activar_simplex(self, simplex, en_paso, estado):
         """
@@ -471,6 +489,16 @@ def crear_app_dash(tamano_filtracion=6):
             )
         ]),
         
+        # Resultado Homología Persistente (colocado antes de los controles)
+        dcc.Loading(
+            id='loading-hp',
+            type='default',
+            children=html.Div(
+                id='resultados-homologia',
+                style={'padding': '20px', 'margin': '20px', 'borderRadius': '10px', 'backgroundColor': '#fdfefe'}
+            )
+        ),
+
         # Controles
         html.Div([
             html.H3("Controles"),
@@ -498,7 +526,7 @@ def crear_app_dash(tamano_filtracion=6):
                 dcc.Checklist(
                     id='toggle-estado',
                     options=[{'label': 'Mostrar estado actual', 'value': 'mostrar'}],
-                    value=['mostrar'],
+                    value=[],
                     inputStyle={'marginRight': '6px'},
                     labelStyle={'display': 'inline-flex', 'alignItems': 'center', 'gap': '6px'}
                 )
@@ -506,7 +534,21 @@ def crear_app_dash(tamano_filtracion=6):
             
             html.Div([
                 html.Label("Simplices disponibles (click para activar/desactivar):"),
-                html.Div(id='lista-simplices', children=_generar_botones_iniciales(constructor))
+                html.Div(id='lista-simplices', children=_generar_botones_iniciales(constructor)),
+                html.Button(
+                    "Cargar ejemplo predefinido",
+                    id='btn-cargar-ejemplo',
+                    n_clicks=0,
+                    style={
+                        'marginTop': '10px',
+                        'padding': '8px 15px',
+                        'border': 'none',
+                        'borderRadius': '5px',
+                        'backgroundColor': '#16a085',
+                        'color': 'white',
+                        'cursor': 'pointer'
+                    }
+                )
             ], style={'marginBottom': '20px'}),
         ], style={'padding': '20px', 'backgroundColor': '#ecf0f1', 'borderRadius': '10px',
                   'margin': '20px'}),
@@ -515,7 +557,7 @@ def crear_app_dash(tamano_filtracion=6):
         html.Div([
             html.H3("Estado Actual"),
             html.Div(id='resumen-estado', children=[])
-        ], id='contenedor-estado', hidden=False,
+        ], id='contenedor-estado', hidden=True,
            style={'padding': '20px', 'backgroundColor': '#e8f8f5', 'borderRadius': '10px',
                   'margin': '20px'}),
         
@@ -800,6 +842,298 @@ def crear_app_dash(tamano_filtracion=6):
 
         fig = constructor.crear_figura_filtracion(nuevo_estado)
         return nuevo_estado, fig, "K0"
+
+    @app.callback(
+        [Output('estado-filtracion', 'data', allow_duplicate=True),
+         Output('grafico-filtracion', 'figure', allow_duplicate=True),
+         Output('paso-actual-texto', 'children', allow_duplicate=True)],
+        Input('btn-cargar-ejemplo', 'n_clicks'),
+        State('estado-filtracion', 'data'),
+        prevent_initial_call=True
+    )
+    def cargar_ejemplo(n_clicks, estado_actual):
+        if not n_clicks:
+            raise dash.exceptions.PreventUpdate
+
+        ejemplo_filtracion = 3
+        ejemplo_simplices = {
+            0: [[1], [3], [5], [1, 3], [1, 5]],
+            1: [[2], [4], [3, 5], [1, 3, 5], [2, 5], [1, 2], [1, 2, 5], [2, 4], [1, 4],
+                [1, 2, 4], [3, 4], [2, 3], [2, 3, 4], [4, 5], [3, 4, 5]],
+            2: [[3, 6], [6], [2, 6], [2, 3, 6], [5, 6], [2, 5, 6], [1, 6], [1, 3, 6],
+                [4, 6], [1, 4, 6], [4, 5, 6]]
+        }
+
+        constructor.tamano_filtracion = ejemplo_filtracion
+        nuevo_estado = constructor.crear_estado_inicial(ejemplo_filtracion)
+
+        for paso, simplices in ejemplo_simplices.items():
+            paso_str = str(paso)
+            for simplex in simplices:
+                if simplex not in nuevo_estado['simplices'][paso_str]:
+                    nuevo_estado['simplices'][paso_str].append(simplex)
+                if simplex not in nuevo_estado['agregados_en_paso'][paso_str]:
+                    nuevo_estado['agregados_en_paso'][paso_str].append(simplex)
+                for t in range(paso + 1, ejemplo_filtracion):
+                    t_str = str(t)
+                    if simplex not in nuevo_estado['simplices'][t_str]:
+                        nuevo_estado['simplices'][t_str].append(simplex)
+
+        fig = constructor.crear_figura_filtracion(nuevo_estado)
+        return nuevo_estado, fig, "K0"
+
+    def _intervalo_to_str(intervalo):
+        nacimiento, muerte = intervalo
+        nacimiento_str = f"{nacimiento:.2f}" if isinstance(nacimiento, (int, float)) else str(nacimiento)
+        if muerte is None:
+            muerte_str = "∞"
+        else:
+            try:
+                muerte_str = "∞" if not isfinite(muerte) else f"{muerte:.2f}"
+            except TypeError:
+                muerte_str = str(muerte)
+        return nacimiento_str, muerte_str
+
+    def _formatear_persistencia(persistencia, titulo):
+        if not persistencia:
+            return html.Div([
+                html.H4(titulo),
+                html.P("Sin intervalos no triviales")
+            ], style={'marginBottom': '15px'})
+
+        items = []
+        for dim, intervalo in persistencia:
+            nacimiento_str, muerte_str = _intervalo_to_str(intervalo)
+            items.append(html.Li(f"H{dim}: ({nacimiento_str}, {muerte_str})"))
+
+        return html.Div([
+            html.H4(titulo),
+            html.Ul(items)
+        ], style={'marginBottom': '15px'})
+
+    def _crear_figura_persistencia(persistencia, titulo):
+        if not persistencia:
+            return html.Div()
+
+        colores = {
+            0: '#2980b9',
+            1: '#27ae60',
+            2: '#8e44ad',
+        }
+
+        valores = [valor for _, (nac, muer) in persistencia for valor in (nac, muer) if isinstance(valor, (int, float)) and isfinite(valor)]
+        max_finito = max(valores) if valores else 1.0
+        minimo = min(valores) if valores else 0.0
+        margen = min(1.0, max_finito * 0.1)
+        infinito_plot = max_finito + margen + 1.0
+
+        figura = go.Figure()
+        offset = 0
+
+        for dim in sorted({dim for dim, _ in persistencia}):
+            barras = [intervalo for dim_int, intervalo in persistencia if dim_int == dim]
+            barras.sort(key=lambda par: ((par[1] if isfinite(par[1]) else infinito_plot) - par[0]), reverse=True)
+
+            for idx, (nac, muer) in enumerate(barras):
+                y = offset + idx + 1
+                fin = muer if isfinite(muer) else infinito_plot
+                muerte_fmt = '∞' if not isfinite(muer) else f'{muer:.2f}'
+                nacimiento_fmt = f'{nac:.2f}' if isinstance(nac, (int, float)) else str(nac)
+                figura.add_trace(
+                    go.Scatter(
+                        x=[nac, fin],
+                        y=[y, y],
+                        mode='lines',
+                        line=dict(color=colores.get(dim, '#34495e'), width=6),
+                        name=f"H{dim}",
+                        hoverinfo='text',
+                        hovertext=f"H{dim}: ({nacimiento_fmt}, {muerte_fmt})",
+                        showlegend=False
+                    )
+                )
+
+                if not isfinite(muer):
+                    figura.add_trace(
+                        go.Scatter(
+                            x=[fin],
+                            y=[y],
+                            mode='markers',
+                            marker=dict(symbol='arrow-right', color=colores.get(dim, '#34495e'), size=10),
+                            hoverinfo='skip',
+                            showlegend=False
+                        )
+                    )
+
+            offset += len(barras) + 1
+
+        figura.update_layout(
+            title=titulo,
+            height=200 + 30 * offset,
+            margin=dict(l=40, r=20, t=40, b=40),
+            xaxis_title='Valor de filtración',
+            xaxis=dict(range=[-margen, infinito_plot], zeroline=False),
+            yaxis=dict(showticklabels=False, zeroline=False),
+            plot_bgcolor='white'
+        )
+
+        return dcc.Graph(
+            figure=figura,
+            config={'displayModeBar': False},
+            style={'flex': '1 1 360px', 'minWidth': '320px'}
+        )
+
+    def _crear_diagrama_persistencia(persistencia, titulo):
+        if not persistencia:
+            return html.Div()
+
+        colores = {
+            0: '#2980b9',
+            1: '#27ae60',
+            2: '#8e44ad',
+        }
+
+        valores = [valor for _, (nac, muer) in persistencia for valor in (nac, muer) if isinstance(valor, (int, float)) and isfinite(valor)]
+        if not valores:
+            valores = [0.0]
+        maximo = max(valores)
+        margen = min(1.0, maximo * 0.1)
+        infinito_plot = maximo + margen + 1.0
+
+        figura = go.Figure()
+
+        figura.add_trace(
+            go.Scatter(
+                x=[- margen, infinito_plot],
+                y=[- margen, infinito_plot],
+                mode='lines',
+                line=dict(color='#bdc3c7', dash='dash'),
+                hoverinfo='skip',
+                showlegend=False
+            )
+        )
+
+        figura.add_trace(
+            go.Scatter(
+                x=[- margen, infinito_plot],
+                y=[infinito_plot, infinito_plot],
+                mode='lines',
+                line=dict(color='rgba(231, 76, 60, 0.35)', dash='dot', width=2),
+                hoverinfo='skip',
+                showlegend=True,
+                name='∞',
+            )
+        )
+
+        legend_shown = set()
+        for dim, (nac, muer) in persistencia:
+            x_val = nac
+            y_val = muer if isfinite(muer) else infinito_plot
+            mostrar_leyenda = dim not in legend_shown
+            legend_shown.add(dim)
+            nacimiento_fmt = f'{nac:.2f}' if isinstance(nac, (int, float)) else str(nac)
+            muerte_fmt = '∞' if not isfinite(muer) else f'{muer:.2f}'
+            figura.add_trace(
+                go.Scatter(
+                    x=[x_val],
+                    y=[y_val],
+                    mode='markers',
+                    marker=dict(size=10, color=colores.get(dim, '#34495e'), symbol='circle'),
+                    name=f"H{dim}",
+                    legendgroup=f"H{dim}",
+                    showlegend=mostrar_leyenda,
+                    hoverinfo='text',
+                    hovertext=f"H{dim}: ({nacimiento_fmt}, {muerte_fmt})"
+                )
+            )
+
+        figura.update_layout(
+            title=titulo,
+            height=350,
+            margin=dict(l=50, r=30, t=40, b=50),
+            xaxis_title='Nacimiento',
+            yaxis_title='Muerte',
+            xaxis=dict(range=[-margen, infinito_plot+margen], zeroline=False),
+            yaxis=dict(range=[-margen, infinito_plot+margen], zeroline=False),
+            plot_bgcolor='white',
+            legend=dict(orientation='h', yanchor='bottom', y=1.02, xanchor='right', x=1)
+        )
+
+        return dcc.Graph(
+            figure=figura,
+            config={'displayModeBar': False},
+            style={'flex': '1 1 360px', 'minWidth': '320px'}
+        )
+
+    @app.callback(
+        Output('resultados-homologia', 'children'),
+        Input('btn-calcular', 'n_clicks'),
+        State('estado-filtracion', 'data'),
+        prevent_initial_call=True
+    )
+    def calcular_homologia(n_clicks, estado):
+        if not estado:
+            raise dash.exceptions.PreventUpdate
+
+        try:
+            st = constructor.construir_filtracion(estado)
+
+            if not st.simplices:
+                return html.Div([
+                    html.H3("Homología Persistente"),
+                    html.P("Activa al menos un simplex antes de calcular la homología."),
+                ], style={'backgroundColor': '#fdf2e9', 'padding': '15px', 'borderRadius': '8px'})
+
+            # Homología persistente sobre ℚ
+            D, simplices = build_boundary_matrix(st)
+            Dred = reduce_matrix(D)
+            persistence_q = st.persistence(Dred, simplices)
+            grafico_q = _crear_figura_persistencia(persistence_q, "Código de barras sobre ℚ")
+            diagrama_q = _crear_diagrama_persistencia(persistence_q, "Diagrama de persistencia sobre ℚ")
+            resumen_q = _formatear_persistencia(persistence_q, "Sobre ℚ")
+
+            # Homología persistente sobre 𝔽₂ usando GUDHI
+            Dist = st.distance_matriz()
+            if Dist is None:
+                raise ValueError("No se pudo construir la matriz de distancias.")
+
+            contenedor_q = html.Div([
+                resumen_q,
+                html.Div([grafico_q, diagrama_q], style={'display': 'flex', 'gap': '20px', 'flexWrap': 'wrap'})
+            ], style={'marginBottom': '20px'})
+
+            try:
+                import gudhi
+            except ImportError:
+                return html.Div([
+                    html.H3("Homología Persistente"),
+                    html.P("Debe instalar 'gudhi' para calcular la homología sobre 𝔽₂."),
+                    contenedor_q
+                ], style={'backgroundColor': '#fdebd0', 'padding': '15px', 'borderRadius': '8px'})
+
+            rips_complex = gudhi.RipsComplex(distance_matrix=Dist, max_edge_length=5.0)
+            simplex_tree = rips_complex.create_simplex_tree(max_dimension=3)
+            persistence_f2 = simplex_tree.persistence(homology_coeff_field=2)
+            resumen_f2 = _formatear_persistencia(persistence_f2, "Sobre 𝔽₂")
+            grafico_f2 = _crear_figura_persistencia(persistence_f2, "Código de barras sobre 𝔽₂")
+            diagrama_f2 = _crear_diagrama_persistencia(persistence_f2, "Diagrama de persistencia sobre 𝔽₂")
+
+            contenedor_f2 = html.Div([
+                resumen_f2,
+                html.Div([grafico_f2, diagrama_f2], style={'display': 'flex', 'gap': '20px', 'flexWrap': 'wrap'})
+            ])
+
+            return html.Div([
+                html.H3("Homología Persistente"),
+                html.P("Resultados calculados en el paso actual de la filtración."),
+                contenedor_q,
+                contenedor_f2
+            ], style={'backgroundColor': '#f2f4f4', 'padding': '15px', 'borderRadius': '8px'})
+
+        except Exception as exc:
+            return html.Div([
+                html.H3("Error al calcular la homología"),
+                html.P(str(exc))
+            ], style={'backgroundColor': '#f9ebea', 'padding': '15px', 'borderRadius': '8px', 'color': '#922b21'})
 
     return app
 

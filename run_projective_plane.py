@@ -6,6 +6,8 @@ Ejecuta este script para abrir la aplicación Dash en el navegador.
 
 import sys
 import os
+import webbrowser
+import threading
 
 # Asegurar que el directorio raíz está en el path
 directorio_raiz = os.path.dirname(os.path.abspath(__file__))
@@ -33,6 +35,14 @@ def main():
     
     # Crear y lanzar la aplicación
     app = crear_app_dash(tamano_filtracion=6)
+
+    def _abrir_navegador():
+        try:
+            webbrowser.open_new("http://localhost:8050")
+        except Exception:
+            pass
+
+    threading.Timer(1.0, _abrir_navegador).start()
     app.run(debug=True, port=8050)
 
 

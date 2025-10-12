@@ -4,7 +4,7 @@
 
 ### 📋 Descripción
 
-Esta aplicación interactiva permite construir filtraciones del plano proyectivo de manera visual e interactiva, y calcular la homología persistente usando diferentes métodos.
+Aplicación Dash que facilita la construcción paso a paso de filtraciones sobre el plano proyectivo, mostrando en tiempo real la evolución de los simplices y los resultados de homología persistente calculados con distintos coeficientes.
 
 ### 🚀 Inicio Rápido
 
@@ -12,19 +12,21 @@ Esta aplicación interactiva permite construir filtraciones del plano proyectivo
 python run_projective_plane.py
 ```
 
-La aplicación se abrirá automáticamente en tu navegador en `http://localhost:8050`
+1. Crea y activa un entorno virtual (opcional pero recomendado).
+2. Instala las dependencias con `pip install -r requirements.txt`.
+3. Ejecuta el script anterior desde la raíz del proyecto.
+
+La aplicación se abrirá automáticamente en tu navegador en `http://localhost:8050`.
 
 ### 🎯 Características
 
 #### 1. Visualización Interactiva
-- Muestra todos los pasos de la filtración (K₀ a K₅) lado a lado
-- Simplices inactivos se muestran en gris con baja opacidad
-- Simplices activos se muestran en azul con opacidad completa
+- Panel principal con todos los pasos de la filtración (K₀ a Kₙ).
 
 #### 2. Construcción de Filtración
-- Click en simplices para activar/desactivar
-- Propagación automática a pasos futuros
-- Manejo automático de caras y cocaras
+- Con un clic sobre vértices, aristas o triángulos se activan o desactivan en el paso seleccionado.
+- Las activaciones se propagan de manera automática a pasos posteriores y garantizan que las caras requeridas estén presentes.
+- Controles dedicados permiten navegar entre pasos, ajustar el tamaño máximo de la filtración y cargar un ejemplo preconfigurado.
 
 #### 3. Cálculo de Homología Persistente
 - Algoritmo personalizado sobre ℚ
@@ -34,3 +36,4 @@ La aplicación se abrirá automáticamente en tu navegador en `http://localhost:
 #### 4. Exportación
 - Exportar código SIMPLICES para usar en notebooks
 - Guardar/cargar configuraciones (próximamente)
+- Clickear directamente en el grafo para editarlos (próximamente)
