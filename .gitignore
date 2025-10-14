@@ -208,3 +208,4 @@ __marimo__/
 RESUMEN_IMPLEMENTACION.md
 README_INTERACTIVE_APP.md
 .gitignore
+*.md

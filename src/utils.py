@@ -9,7 +9,8 @@ from typing import List, Tuple, Dict
 def plot_persistence_barcode(persistence: List[Tuple[int, Tuple[float, float]]], ax = None):
     if ax is None:
         _, ax = plt.subplots(figsize=(5, 5))
-    x_vals = sorted([death for _, (_, death) in persistence if death != float('inf')])
+    x_vals = sorted([death for _, (_, death) in persistence if death != float('inf')]
+                    + [birth for _, (birth, _) in persistence])
 
     bar_idx = 0
     for dim in sorted(set(d for d, _ in persistence)):
@@ -110,6 +111,7 @@ class Filtration_plano_proyectivo:
 
         low_of = {}
         for j in range(N):
+            # 
             lj = low(Dred[:, j])
             if lj != -1:
                 low_of[j] = lj
