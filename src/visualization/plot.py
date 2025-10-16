@@ -12,7 +12,7 @@ def plot_filtration(simplices_maximals, filtration_size, seed=28, show=True):
     filtration_size : int
         The number of filtration steps.'''
     np.random.seed(seed)
-    points = calculate_positions(simplices_maximals, filtration_size, seed=seed)
+    points, vertex_ids = calculate_positions(simplices_maximals, filtration_size, seed=seed)
 
     fig, axs = plt.subplots(1, filtration_size, figsize=(4 * filtration_size, 4))
     
@@ -23,12 +23,26 @@ def plot_filtration(simplices_maximals, filtration_size, seed=28, show=True):
     for filt_idx, simplices in simplices_maximals.items():
         # Draw all points as background in light gray
         axs[filt_idx].scatter(points[:, 0], points[:, 1], alpha=0.5)
+
+        # Add node identifiers on top of each vertex
+        for vertex_id in vertex_ids:
+            axs[filt_idx].text(
+                points[vertex_id, 0],
+                points[vertex_id, 1],
+                f"{vertex_id}",
+                color='darkblue',
+                ha='center',
+                va='center',
+                fontsize=12,
+                zorder=3,
+                bbox=dict(boxstyle='round,pad=0.15', fc='white', ec='none', alpha=0.6)
+            )
         
         for simplex in simplices:
-            dim = len(simplex) - 1
+            dim = len(simplex)
             if dim == 0:
                 axs[filt_idx].scatter(points[simplex[0], 0], points[simplex[0], 1], 
-                                     color='blue', zorder=1)
+                                     color='blue', zorder=1, s=500)
             elif dim == 1:
                 axs[filt_idx].plot(points[simplex, 0], points[simplex, 1], 
                                   color='black', linewidth=2, zorder=2)
@@ -48,13 +62,13 @@ def plot_filtration(simplices_maximals, filtration_size, seed=28, show=True):
     if show:
         plt.show()
 
-def calculate_positions(simplices_maximals, filtration_size, seed=28, iterations=100):
+def calculate_positions(simplices_maximals, filtration_size, seed=28, iterations=200):
     '''Calculates a fixed position for each vertex in the simplicial complex.
     
     Returns:
     --------
-    np.ndarray
-        An array of shape (num_vertices, 2) with the positions of each vertex.'''
+    tuple[np.ndarray, list[int]]
+        Array of vertex positions and the list of vertex ids present in the complex.'''
     simplices_maximals_last = simplices_maximals[filtration_size - 1]
     
     # Collect all vertices from all simplices
@@ -72,10 +86,11 @@ def calculate_positions(simplices_maximals, filtration_size, seed=28, iterations
             G.add_edges_from(edges)
     
     pos = nx.spring_layout(G, seed=seed, iterations=iterations)
-    
+
     max_vertex = max(all_vertices)
     points = np.zeros((max_vertex + 1, 2))
     for vertex_id, (x, y) in pos.items():
         points[vertex_id] = [x, y]
-    
-    return points
+
+    vertex_ids = sorted(all_vertices)
+    return points, vertex_ids
