@@ -2,6 +2,15 @@ import matplotlib.pyplot as plt
 import numpy as np
 import networkx as nx
 
+def faces(simplex):
+    '''Generates all faces of a simplex'''
+    n = len(simplex)
+    res = []
+    for i in range(1 << n):
+        face = list(simplex[j] for j in range(n) if (i & (1 << j)))
+        res.append(face)
+    return res[1:]
+
 def plot_filtration(simplices_maximals, filtration_size, seed=28, show=True):
     '''Plots the filtration of a simplicial complex.
     
@@ -12,7 +21,7 @@ def plot_filtration(simplices_maximals, filtration_size, seed=28, show=True):
     filtration_size : int
         The number of filtration steps.'''
     np.random.seed(seed)
-    points, vertex_ids = calculate_positions(simplices_maximals, filtration_size, seed=seed)
+    points = calculate_positions(simplices_maximals, filtration_size, seed=seed)
 
     fig, axs = plt.subplots(1, filtration_size, figsize=(4 * filtration_size, 4))
     
@@ -22,41 +31,39 @@ def plot_filtration(simplices_maximals, filtration_size, seed=28, show=True):
 
     for filt_idx, simplices in simplices_maximals.items():
         # Draw all points as background in light gray
-        axs[filt_idx].scatter(points[:, 0], points[:, 1], alpha=0.5)
 
-        # Add node identifiers on top of each vertex
-        for vertex_id in vertex_ids:
-            axs[filt_idx].text(
-                points[vertex_id, 0],
-                points[vertex_id, 1],
-                f"{vertex_id}",
-                color='darkblue',
-                ha='center',
-                va='center',
-                fontsize=12,
-                zorder=3,
-                bbox=dict(boxstyle='round,pad=0.15', fc='white', ec='none', alpha=0.6)
-            )
-        
         for simplex in simplices:
-            dim = len(simplex)
-            if dim == 0:
-                axs[filt_idx].scatter(points[simplex[0], 0], points[simplex[0], 1], 
-                                     color='blue', zorder=1, s=500)
-            elif dim == 1:
-                axs[filt_idx].plot(points[simplex, 0], points[simplex, 1], 
-                                  color='black', linewidth=2, zorder=2)
-            elif dim == 2:
-                triangle = plt.Polygon(points[simplex], alpha=0.4, color='green', zorder=1)
-                axs[filt_idx].add_patch(triangle)
-            elif dim >= 3:
-                # For higher dimensional simplices, just show one face
-                tetrahedron = plt.Polygon(points[simplex[:3]], alpha=0.4, color='red', zorder=1)
-                axs[filt_idx].add_patch(tetrahedron)
+            for subsimplex in faces(simplex):
+                dim = len(subsimplex) - 1
+                if dim == 0:
+                    axs[filt_idx].scatter(points[subsimplex[0], 0], points[subsimplex[0], 1], 
+                                         color='lightblue', zorder=1, s=400, alpha=0.8)
+                    axs[filt_idx].text(
+                        points[subsimplex[0], 0],
+                        points[subsimplex[0], 1],
+                        f"{subsimplex[0]}",
+                        color='darkblue',
+                        ha='center',
+                        va='center',
+                        fontsize=12,
+                        zorder=filtration_size,
+                        bbox=dict(boxstyle='round,pad=0.15', fc='lightblue', ec='none', alpha=0.6)
+                    )
 
-        axs[filt_idx].set_title(f'K{filt_idx}')
-        axs[filt_idx].set_aspect('equal')
-        axs[filt_idx].axis('off')
+                elif dim == 1:
+                    axs[filt_idx].plot(points[subsimplex, 0], points[subsimplex, 1], 
+                                      color='black', linewidth=2, zorder=2)
+                elif dim == 2:
+                    triangle = plt.Polygon(points[subsimplex], alpha=0.6, color='lightblue', zorder=2)
+                    axs[filt_idx].add_patch(triangle)
+                elif dim >= 3:
+                    # For higher dimensional simplices, just show one face
+                    tetrahedron = plt.Polygon(points[subsimplex[:3]], alpha=0.6, color='red', zorder=2)
+                    axs[filt_idx].add_patch(tetrahedron)
+
+                axs[filt_idx].set_title(f'K{filt_idx}')
+                axs[filt_idx].set_aspect('equal')
+                axs[filt_idx].axis('off')
     
     plt.tight_layout()
     if show:
@@ -92,5 +99,4 @@ def calculate_positions(simplices_maximals, filtration_size, seed=28, iterations
     for vertex_id, (x, y) in pos.items():
         points[vertex_id] = [x, y]
 
-    vertex_ids = sorted(all_vertices)
-    return points, vertex_ids
+    return points
