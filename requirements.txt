@@ -10,3 +10,4 @@ networkx>=3.1
 dash>=2.14.0
 plotly>=5.17.0
 jupyter-dash>=0.4.2
+kmapper==2.1.0

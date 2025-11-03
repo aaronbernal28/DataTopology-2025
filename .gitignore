@@ -214,3 +214,6 @@ results/3F2.png
 results/3filtration.png
 results/3BF2.png
 results/3Bfiltration.png
+
+Mapper/*
+data/raw/sql-console-for-marianbasti-boletin-oficial-argentina.csv
