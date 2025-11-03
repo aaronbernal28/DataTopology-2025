@@ -217,3 +217,4 @@ results/3Bfiltration.png
 
 Mapper/*
 data/raw/sql-console-for-marianbasti-boletin-oficial-argentina.csv
+data/processed/checkpoints/*
